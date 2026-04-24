@@ -40,6 +40,7 @@ app.include_router(events_router, prefix="/events", tags=["Events"])
 app.include_router(ws_router, tags=["WebSocket"])
 
 
+@app.get("/")
 @app.get("/health")
 def health():
     return {"status": "ok", "version": "2.0.0"}
