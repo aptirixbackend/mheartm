@@ -155,7 +155,7 @@ function TagButton({ label, selected, onClick }) {
   );
 }
 
-function InputField({ icon, label, type = "text", placeholder, value, onChange, min, max, required }) {
+function InputField({ icon, label, type = "text", placeholder, value, onChange, min, max, required, readOnly, hint }) {
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
@@ -164,9 +164,29 @@ function InputField({ icon, label, type = "text", placeholder, value, onChange, 
         <input
           type={type} value={value} onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder} min={min} max={max} required={required}
-          className={`w-full border border-gray-200 rounded-xl ${icon ? "pl-10" : "pl-4"} pr-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition text-sm`}
+          readOnly={readOnly}
+          aria-readonly={readOnly || undefined}
+          tabIndex={readOnly ? -1 : undefined}
+          className={`w-full border rounded-xl ${icon ? "pl-10" : "pl-4"} ${readOnly ? "pr-10 bg-gray-50 text-gray-500 border-gray-200 cursor-not-allowed select-all" : "pr-4 text-gray-900 border-gray-200 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"} placeholder-gray-400 transition text-sm py-3`}
         />
+        {readOnly && (
+          /* Small lock icon at the right so it's immediately obvious why
+             the field doesn't respond to clicks. Tooltip is the hint prop. */
+          <span
+            title={hint || "Not editable"}
+            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+            aria-hidden="true"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </span>
+        )}
       </div>
+      {hint && (
+        <p className="mt-1.5 text-xs text-gray-400">{hint}</p>
+      )}
     </div>
   );
 }
@@ -193,6 +213,10 @@ export default function Signup() {
   const [showPwd, setShowPwd] = useState(false);
   const [images, setImages] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(false);
+  // Set to true after a successful Google sign-in. Locks the email field,
+  // hides the password + Google button, and makes handleNext skip the
+  // /auth/signup call (Google already created the account).
+  const [fromGoogle, setFromGoogle] = useState(false);
 
   const [form, setForm] = useState({
     name: "", email: "", password: "", phone_number: "",
@@ -238,22 +262,27 @@ export default function Signup() {
             setLoading(true);
             try {
               const result = await googleSignIn(resp.credential);
-              // New Google users (or returning users without a complete profile)
-              // still need to finish onboarding — jump straight to step 2.
+              // Fully-completed profiles go straight to the app.
               if (result.is_complete) {
                 navigate("/dashboard");
-              } else {
-                // Prefill name + email so onboarding feels seamless.
-                setForm((f) => ({
-                  ...f,
-                  email: result.email || f.email,
-                  name: result.name || f.name,
-                  // Password isn't used for Google accounts but our local validation
-                  // still checks length — stash a random placeholder that's >= 8 chars.
-                  password: f.password || `google_${result.user_id || Math.random().toString(36).slice(2)}`,
-                }));
-                setStep(2);
+                return;
               }
+              // New Google users (or returning users without a complete
+              // profile) need to finish onboarding. Stay on step 1 so they
+              // can confirm the pre-filled name, enter a phone number
+              // (Google's ID token doesn't include it), and review their
+              // email (locked). Password field is hidden for Google users.
+              setFromGoogle(true);
+              setForm((f) => ({
+                ...f,
+                email: result.email || f.email,
+                name: result.name || f.name,
+                phone_number: result.phone_number || f.phone_number,
+                // Password isn't used for Google accounts but our local
+                // validation might still read form.password — stash a random
+                // placeholder that's >= 8 chars so it passes any length check.
+                password: f.password || `google_${result.user_id || Math.random().toString(36).slice(2)}`,
+              }));
             } catch (err) {
               setError(err.message || "Google sign-in failed");
             } finally {
@@ -335,7 +364,8 @@ export default function Signup() {
       if (!form.name.trim()) return "Full name is required";
       if (!form.email.trim()) return "Email is required";
       if (!form.phone_number.trim()) return "Phone number is required";
-      if (form.password.length < 8) return "Password must be at least 8 characters";
+      // Google users already have an account on the backend — no password needed.
+      if (!fromGoogle && form.password.length < 8) return "Password must be at least 8 characters";
     }
     if (step === 2) {
       const age = ageFromDob(form.date_of_birth);
@@ -362,6 +392,13 @@ export default function Signup() {
     setError("");
 
     if (step === 1) {
+      // Google flow: account already exists (created on /auth/google).
+      // Skip /auth/signup — it would 409 on the duplicate email. Just
+      // advance so the user can fill out profile details.
+      if (fromGoogle) {
+        setStep(2);
+        return;
+      }
       setLoading(true);
       try {
         await signup(form.email, form.password, form.name, form.phone_number);
@@ -529,32 +566,81 @@ export default function Signup() {
           {/* STEP 1 — Account */}
           {step === 1 && (
             <div className="space-y-4">
-              <div ref={googleBtnRef} className="w-full flex justify-center min-h-[44px]" />
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-gray-200" />
-                <span className="text-[11px] text-gray-400 font-medium uppercase tracking-wide">or sign up with email</span>
-                <div className="flex-1 h-px bg-gray-200" />
-              </div>
-              <InputField icon={<User size={16} />} label="Full name" placeholder="Your full name" value={form.name} onChange={(v) => set("name", v)} required />
-              <InputField icon={<Mail size={16} />} label="Email address" type="email" placeholder="you@example.com" value={form.email} onChange={(v) => set("email", v)} required />
-              <InputField icon={<Phone size={16} />} label="Phone number" type="tel" placeholder="+1 234 567 8900" value={form.phone_number} onChange={(v) => set("phone_number", v)} required />
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                  <input
-                    type={showPwd ? "text" : "password"} value={form.password}
-                    onChange={(e) => set("password", e.target.value)}
-                    placeholder="Min. 8 characters"
-                    className="w-full border border-gray-200 rounded-xl pl-10 pr-12 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition text-sm"
-                  />
-                  <button type="button" onClick={() => setShowPwd(!showPwd)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                    {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+              {/* Email/password path: show Google button + "or" divider.
+                  After a successful Google sign-in we already have the
+                  email on file, so hide the button and show a confirmation
+                  banner instead. */}
+              {!fromGoogle ? (
+                <>
+                  <div ref={googleBtnRef} className="w-full flex justify-center min-h-[44px]" />
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-px bg-gray-200" />
+                    <span className="text-[11px] text-gray-400 font-medium uppercase tracking-wide">or sign up with email</span>
+                    <div className="flex-1 h-px bg-gray-200" />
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-start gap-2.5 p-3 bg-green-50 border border-green-200 rounded-xl text-green-700 text-xs">
+                  <Check size={16} className="mt-0.5 flex-shrink-0" />
+                  <span>
+                    Signed in with Google as <strong>{form.email}</strong>. Confirm your details below — your email can't be changed because it's linked to your Google account.
+                  </span>
                 </div>
-                <p className="mt-1.5 text-xs text-gray-400">Must be at least 8 characters</p>
-              </div>
+              )}
+
+              <InputField
+                icon={<User size={16} />}
+                label="Full name"
+                placeholder="Your full name"
+                value={form.name}
+                onChange={(v) => set("name", v)}
+                required
+              />
+
+              <InputField
+                icon={<Mail size={16} />}
+                label="Email address"
+                type="email"
+                placeholder="you@example.com"
+                value={form.email}
+                onChange={(v) => set("email", v)}
+                required
+                readOnly={fromGoogle}
+                hint={fromGoogle ? "Linked to your Google account" : undefined}
+              />
+
+              <InputField
+                icon={<Phone size={16} />}
+                label="Phone number"
+                type="tel"
+                placeholder="+1 234 567 8900"
+                value={form.phone_number}
+                onChange={(v) => set("phone_number", v)}
+                required
+                hint={fromGoogle && !form.phone_number ? "Google doesn't share phone numbers — please add yours" : undefined}
+              />
+
+              {/* Password is an email/password flow detail — Google users
+                  never type or see one. */}
+              {!fromGoogle && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    <input
+                      type={showPwd ? "text" : "password"} value={form.password}
+                      onChange={(e) => set("password", e.target.value)}
+                      placeholder="Min. 8 characters"
+                      className="w-full border border-gray-200 rounded-xl pl-10 pr-12 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition text-sm"
+                    />
+                    <button type="button" onClick={() => setShowPwd(!showPwd)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <p className="mt-1.5 text-xs text-gray-400">Must be at least 8 characters</p>
+                </div>
+              )}
             </div>
           )}
 
