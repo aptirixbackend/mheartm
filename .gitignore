@@ -1,0 +1,45 @@
+# ── Secrets ────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# ── Node / frontend ────────────────────────────────────
+node_modules/
+dist/
+build/
+.vite/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+esbuild.err
+
+# ── Python / backend ───────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# virtualenvs (backend/luv is a venv, not source)
+venv/
+.venv/
+env/
+backend/luv/
+
+# ── IDE / OS ───────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Claude / tooling caches ────────────────────────────
+.claude/
