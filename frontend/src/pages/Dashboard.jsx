@@ -806,8 +806,14 @@ function SwipeDeck({ candidates, onLike, onPass, onOpen, onLoadMore, hasMore, lo
 
   return (
     <div className="flex flex-col items-center">
-      {/* Card stack — fixed aspect ratio so the layout is predictable */}
-      <div className="relative w-full max-w-sm aspect-[3/4.3]">
+      {/*
+        Card stack — fixed aspect ratio so the layout is predictable.
+        `isolate` creates a new stacking context so the cards' internal
+        z-indexes (3/2/1) don't escape and render above modals (z-50)
+        elsewhere on the page. Without this, tapping a card opened the
+        ProfileDetailModal but the swipe deck drew on top of it.
+      */}
+      <div className="relative isolate w-full max-w-sm aspect-[3/4.3]">
         <AnimatePresence>
           {visible.map((p, i) => {
             const isTop = i === 0;
@@ -817,7 +823,7 @@ function SwipeDeck({ candidates, onLike, onPass, onOpen, onLoadMore, hasMore, lo
                 person={p}
                 isTop={isTop}
                 offset={i}
-                zIndex={100 - i}
+                zIndex={3 - i}
                 onLike={(id) => { /* handled in onExit */ void id; }}
                 onPass={(id) => { /* handled in onExit */ void id; }}
                 onOpen={onOpen}
