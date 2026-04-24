@@ -1,10 +1,13 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { api } from "../api/client";
 
-// Must match backend `settings.google_client_id`. Both projects share the same
-// Google Cloud client — reusing credentials from the `app_developement` project.
+// Must match backend `settings.google_client_id` (Railway env var GOOGLE_CLIENT_ID).
+// This is the OAuth client from the Google Cloud project whose Authorized
+// JavaScript origins list includes matchinminutes.com — switch this value
+// and the Railway env var together, never separately, or token verification
+// will 401 even though the browser sign-in appears to succeed.
 export const GOOGLE_CLIENT_ID =
-  "594414222454-leq90b0c39cobg35krqdavdirkghdoej.apps.googleusercontent.com";
+  "610696728606-hjv0463opi1e5umn1nas2e3589ss9dqv.apps.googleusercontent.com";
 
 // Lazy-load Google Identity Services script, memoised so multiple pages share one load.
 let gsiPromise = null;
