@@ -75,6 +75,72 @@ export default function CallOverlay({ call }) {
 
   if (status === "idle") return null;
 
+  // ── Incoming call: compact top banner, NOT fullscreen ────────────
+  // When someone is ringing you, we don't want to take over the whole
+  // screen — the user should be able to keep scrolling/reading while
+  // deciding. Shows a small card at the top with avatar + name + two
+  // big action buttons (green accept, red decline). Once accepted, the
+  // hook transitions status → "connected" and we fall through to the
+  // fullscreen in-call UI.
+  if (status === "ringing") {
+    const isVideo = media === "video";
+    const avatarUrl = peer?.photo || peer?.main_image_url;
+    return (
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] w-[min(92vw,26rem)] pointer-events-auto">
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-200 p-3 flex items-center gap-3">
+          {/* Avatar w/ pulsing ring */}
+          <div className="relative flex-shrink-0">
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt=""
+                className="w-12 h-12 rounded-full object-cover"
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-lg font-bold text-white">
+                {peer?.name?.[0]?.toUpperCase() || "?"}
+              </div>
+            )}
+            <span className="absolute inset-0 rounded-full ring-2 ring-green-400/60 animate-ping" />
+          </div>
+
+          {/* Name + subtext */}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-900 truncate">
+              {peer?.name || "Unknown"}
+            </p>
+            <p className="text-xs text-gray-500 flex items-center gap-1">
+              {isVideo ? (
+                <Video className="w-3 h-3 text-pink-500" />
+              ) : (
+                <PhoneIncoming className="w-3 h-3 text-green-500" />
+              )}
+              Incoming {isVideo ? "video" : "voice"} call…
+            </p>
+          </div>
+
+          {/* Decline */}
+          <button
+            onClick={declineIncoming}
+            className="w-11 h-11 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-md transition flex-shrink-0"
+            aria-label="Decline"
+          >
+            <PhoneOff className="w-5 h-5 text-white" />
+          </button>
+
+          {/* Accept */}
+          <button
+            onClick={acceptIncoming}
+            className="w-11 h-11 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center shadow-md transition flex-shrink-0 animate-pulse"
+            aria-label="Accept"
+          >
+            <Phone className="w-5 h-5 text-white" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ── End-of-call flash or paywall state ──────────────────────────
   if (status === "ended") {
     return (
@@ -136,11 +202,12 @@ export default function CallOverlay({ call }) {
       {/* Gradient veil so text/controls stay legible over any remote image */}
       <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/80 pointer-events-none" />
 
-      {/* Header — peer name + status/timer */}
+      {/* Header — peer name + status/timer. At this point status is
+          either "calling" (outgoing, ringing) or "connected" — the
+          "ringing" state returned the compact banner above. */}
       <div className="relative z-10 pt-10 px-6 text-center">
         <p className="text-xs uppercase tracking-widest text-white/60">
           {status === "calling"   && "Calling…"}
-          {status === "ringing"   && "Incoming call"}
           {status === "connected" && (isVideo ? "Video call" : "Voice call")}
         </p>
         <h2 className="text-3xl font-bold mt-1">{peer?.name || "Unknown"}</h2>
@@ -149,7 +216,7 @@ export default function CallOverlay({ call }) {
         )}
       </div>
 
-      {/* Big centered avatar for ringing / calling / audio. Hidden during
+      {/* Big centered avatar for calling / audio. Hidden during
           connected video calls so the remote feed shows full-bleed. */}
       {(!isVideo || status !== "connected") && (
         <div className="relative z-10 flex-1 flex items-center justify-center">
@@ -165,7 +232,7 @@ export default function CallOverlay({ call }) {
                 {peer?.name?.[0]?.toUpperCase() || "?"}
               </div>
             )}
-            {(status === "calling" || status === "ringing") && (
+            {status === "calling" && (
               // Pulsing ring to signal "this is live" while we wait
               <div className="absolute inset-0 rounded-full ring-4 ring-white/30 animate-ping" />
             )}
@@ -182,56 +249,35 @@ export default function CallOverlay({ call }) {
         />
       )}
 
-      {/* ── Control bar ────────────────────────────────────────── */}
+      {/* ── Control bar — calling or connected: mute/cam + hangup ── */}
       <div className="relative z-10 pb-10 px-6">
-        {status === "ringing" ? (
-          // Two big buttons — decline (red) + accept (green)
-          <div className="flex items-center justify-center gap-12">
-            <button
-              onClick={declineIncoming}
-              className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg transition"
-              aria-label="Decline"
-            >
-              <PhoneOff className="w-7 h-7" />
-            </button>
-            <button
-              onClick={acceptIncoming}
-              className="w-16 h-16 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center shadow-lg transition animate-pulse"
-              aria-label="Accept"
-            >
-              {isVideo ? <Video className="w-7 h-7" /> : <PhoneIncoming className="w-7 h-7" />}
-            </button>
-          </div>
-        ) : (
-          // Calling or connected — mute/cam toggles + hangup
-          <div className="flex items-center justify-center gap-5">
-            <button
-              onClick={toggleMic}
-              className={`w-14 h-14 rounded-full flex items-center justify-center transition ${micMuted ? "bg-white text-gray-900" : "bg-white/10 hover:bg-white/20"}`}
-              aria-label={micMuted ? "Unmute" : "Mute"}
-            >
-              {micMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
-            </button>
+        <div className="flex items-center justify-center gap-5">
+          <button
+            onClick={toggleMic}
+            className={`w-14 h-14 rounded-full flex items-center justify-center transition ${micMuted ? "bg-white text-gray-900" : "bg-white/10 hover:bg-white/20"}`}
+            aria-label={micMuted ? "Unmute" : "Mute"}
+          >
+            {micMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+          </button>
 
-            {isVideo && (
-              <button
-                onClick={toggleCam}
-                className={`w-14 h-14 rounded-full flex items-center justify-center transition ${camOff ? "bg-white text-gray-900" : "bg-white/10 hover:bg-white/20"}`}
-                aria-label={camOff ? "Camera on" : "Camera off"}
-              >
-                {camOff ? <VideoOff className="w-6 h-6" /> : <Video className="w-6 h-6" />}
-              </button>
-            )}
-
+          {isVideo && (
             <button
-              onClick={() => endCall({ reason: "hangup" })}
-              className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg transition"
-              aria-label="Hang up"
+              onClick={toggleCam}
+              className={`w-14 h-14 rounded-full flex items-center justify-center transition ${camOff ? "bg-white text-gray-900" : "bg-white/10 hover:bg-white/20"}`}
+              aria-label={camOff ? "Camera on" : "Camera off"}
             >
-              <PhoneOff className="w-7 h-7" />
+              {camOff ? <VideoOff className="w-6 h-6" /> : <Video className="w-6 h-6" />}
             </button>
-          </div>
-        )}
+          )}
+
+          <button
+            onClick={() => endCall({ reason: "hangup" })}
+            className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg transition"
+            aria-label="Hang up"
+          >
+            <PhoneOff className="w-7 h-7" />
+          </button>
+        </div>
       </div>
     </div>
   );

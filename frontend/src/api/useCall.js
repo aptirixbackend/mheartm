@@ -234,11 +234,18 @@ export function useCall({ sendSignal }) {
 
     if (!silent) emit("call_hangup", { duration, reason });
 
-    // Only the side that had a connected call logs a non-missed summary;
-    // if status is still 'calling' / 'ringing', that's a missed call and
-    // the ring-timeout path / decline path already logged it.
-    if (status === "connected" && matchId && media) {
-      api.messages.logCall(matchId, { media, durationSeconds: duration }).catch(() => {});
+    // Log one of two kinds of summary into the chat thread:
+    //   • connected → a proper "📞 Voice call · 2m 15s" message
+    //   • calling / ringing → a "📵 Missed call" (caller cancelled or
+    //     callee is about to hang up on an uninvited ring).
+    // Previously this branch only fired for `connected`, so if you
+    // tapped cancel during the outgoing ring nothing showed in chat.
+    if (matchId && media) {
+      if (status === "connected") {
+        api.messages.logCall(matchId, { media, durationSeconds: duration }).catch(() => {});
+      } else if (status === "calling" || status === "ringing") {
+        api.messages.logCall(matchId, { media, missed: true }).catch(() => {});
+      }
     }
 
     resetState();
@@ -402,19 +409,33 @@ export function useCall({ sendSignal }) {
   }, [status, matchId, media, emit, buildPc, sendSignal, resetState]);
 
   // ── Local controls ─────────────────────────────────────────────
+  // Mute/cam toggle uses React state as the source of truth — previously
+  // we derived "next" from `tracks.every(t => t.enabled)` and then did
+  // `t.enabled = !next ? true : false`, which always resolved to `true`
+  // (so pressing mute did nothing). Flip off `micMuted` state and
+  // reflect it into the track. `setMicMuted(prev => !prev)` avoids a
+  // stale-closure bug if the button is mashed quickly.
   const toggleMic = useCallback(() => {
-    const tracks = localStream.current?.getAudioTracks() || [];
-    const next = !tracks.every((t) => t.enabled);
-    tracks.forEach((t) => (t.enabled = !next ? true : false));
-    setMicMuted(next);
+    setMicMuted((prev) => {
+      const next = !prev;
+      const tracks = localStream.current?.getAudioTracks() || [];
+      tracks.forEach((t) => {
+        t.enabled = !next; // muted == !enabled
+      });
+      return next;
+    });
   }, []);
 
   const toggleCam = useCallback(() => {
-    const tracks = localStream.current?.getVideoTracks() || [];
-    if (!tracks.length) return;
-    const next = !tracks.every((t) => t.enabled);
-    tracks.forEach((t) => (t.enabled = !next ? true : false));
-    setCamOff(next);
+    setCamOff((prev) => {
+      const next = !prev;
+      const tracks = localStream.current?.getVideoTracks() || [];
+      if (!tracks.length) return prev; // no camera → no-op
+      tracks.forEach((t) => {
+        t.enabled = !next;
+      });
+      return next;
+    });
   }, []);
 
   const dismissEnded = useCallback(() => {
