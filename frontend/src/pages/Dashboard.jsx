@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api/client";
@@ -645,6 +646,221 @@ function DiscoverCard({ person, onLike, onPass, onOpen }) {
   );
 }
 
+// ─── Mobile Swipe Deck ───────────────────────────────────────────────────────
+// Tinder-style gesture UI for phones. One card at a time, two placeholders
+// stacked behind for depth. Drag a card horizontally:
+//   • past +100 px  → "like"  (onLike)
+//   • past –100 px  → "pass"  (onPass)
+//   • a pure tap (no drag)   → opens the profile detail modal (onOpen)
+// We reuse the same handlers as the grid so matches/quotas/paywall all
+// behave identically on mobile and desktop.
+function SwipeCard({ person, onLike, onPass, onOpen, onExit, zIndex, offset, isTop }) {
+  const x = useMotionValue(0);
+  // Tilt the card slightly as it's dragged — same tiny 15° max rotation
+  // Tinder uses so it doesn't feel floppy.
+  const rotate  = useTransform(x, [-200, 0, 200], [-15, 0, 15]);
+  const likeOp  = useTransform(x, [40, 140], [0, 1]);
+  const passOp  = useTransform(x, [-140, -40], [1, 0]);
+
+  const images = person.images?.length > 0
+    ? person.images.map(i => i.image_url)
+    : [person.main_image_url].filter(Boolean);
+  const [imgIdx, setImgIdx] = useState(0);
+  const hero = images[imgIdx] || images[0];
+
+  function handleDragEnd(_, info) {
+    // Threshold: 100 px drag OR fast flick (>500 px/s velocity).
+    const swipedRight = info.offset.x >  100 || info.velocity.x >  500;
+    const swipedLeft  = info.offset.x < -100 || info.velocity.x < -500;
+    if (swipedRight) {
+      onExit("right");
+      onLike(person.id);
+    } else if (swipedLeft) {
+      onExit("left");
+      onPass(person.id);
+    }
+    // otherwise motion springs back to 0 automatically
+  }
+
+  return (
+    <motion.div
+      drag={isTop ? "x" : false}
+      dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+      dragElastic={0.9}
+      onDragEnd={handleDragEnd}
+      style={{
+        x: isTop ? x : 0,
+        rotate: isTop ? rotate : 0,
+        zIndex,
+        scale: 1 - offset * 0.04,
+        y: offset * 8,
+      }}
+      initial={false}
+      animate={{ opacity: 1 }}
+      whileTap={isTop ? { cursor: "grabbing" } : undefined}
+      className="absolute inset-0 rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-br from-pink-100 to-purple-100 select-none"
+    >
+      {/* Tap target — a short click (no drag) opens the profile modal.
+          We fire on click rather than mouseup so framer's drag threshold
+          (3 px) still suppresses accidental opens during a swipe. */}
+      <button
+        onClick={() => onOpen?.(person.id)}
+        className="absolute inset-0 w-full h-full cursor-pointer"
+        aria-label={`Open ${person.name}'s profile`}
+      >
+        {hero ? (
+          <img src={hero} alt={person.name} className="absolute inset-0 w-full h-full object-cover pointer-events-none" draggable={false} />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-8xl font-black text-pink-300">{person.name?.[0]}</span>
+          </div>
+        )}
+      </button>
+
+      {/* Dots for multi-photo users — tap to switch */}
+      {images.length > 1 && isTop && (
+        <div className="absolute top-3 left-0 right-0 flex justify-center gap-1 px-4 z-10">
+          {images.map((_, i) => (
+            <button
+              key={i}
+              onClick={(e) => { e.stopPropagation(); setImgIdx(i); }}
+              className={`h-1 rounded-full transition-all ${i === imgIdx ? "flex-1 bg-white" : "w-3 bg-white/50"}`}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* LIKE / NOPE stamps that fade in as user drags */}
+      {isTop && (
+        <>
+          <motion.div
+            style={{ opacity: likeOp }}
+            className="absolute top-10 left-6 px-4 py-2 border-4 border-green-400 rounded-xl rotate-[-12deg] pointer-events-none z-20"
+          >
+            <span className="text-green-400 text-3xl font-black tracking-wider">LIKE</span>
+          </motion.div>
+          <motion.div
+            style={{ opacity: passOp }}
+            className="absolute top-10 right-6 px-4 py-2 border-4 border-red-400 rounded-xl rotate-[12deg] pointer-events-none z-20"
+          >
+            <span className="text-red-400 text-3xl font-black tracking-wider">NOPE</span>
+          </motion.div>
+        </>
+      )}
+
+      {/* Info veil at the bottom */}
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-16 pb-5 px-5 pointer-events-none">
+        <h3 className="text-white font-bold text-2xl leading-tight drop-shadow">{person.name}, {person.age}</h3>
+        {person.city && (
+          <p className="text-white/90 text-sm flex items-center gap-1 mt-1">
+            <MapPin size={13} /> {person.city}{person.country ? `, ${person.country}` : ""}
+          </p>
+        )}
+        {person.vibes?.length > 0 && (
+          <div className="flex gap-1.5 mt-2 flex-wrap">
+            {person.vibes.slice(0, 3).map(v => (
+              <span key={v} className="text-xs px-2.5 py-1 bg-white/25 text-white rounded-full backdrop-blur-sm">{v}</span>
+            ))}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+function SwipeDeck({ candidates, onLike, onPass, onOpen, onLoadMore, hasMore, loadingMore }) {
+  // Keep a local index so the card flies off before its parent re-renders.
+  // Parent's `candidates` only shrinks when matches/quota/network round-trip
+  // finishes; we need the deck to feel instant.
+  const [cursor, setCursor] = useState(0);
+  // Reset the cursor if the candidate list is replaced (filters changed).
+  useEffect(() => { setCursor(0); }, [candidates]);
+
+  // Prefetch more when the user is 3 cards from the bottom of what's loaded.
+  useEffect(() => {
+    if (hasMore && !loadingMore && cursor >= candidates.length - 3) {
+      onLoadMore?.();
+    }
+  }, [cursor, candidates.length, hasMore, loadingMore, onLoadMore]);
+
+  function swipe(id, dir) {
+    if (dir === "right") onLike(id);
+    else onPass(id);
+    setCursor((c) => c + 1);
+  }
+
+  // Show the current top card + up to 2 behind it so the deck looks stacked.
+  const visible = candidates.slice(cursor, cursor + 3);
+
+  if (cursor >= candidates.length) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center px-6">
+        <div className="w-20 h-20 rounded-full bg-pink-50 flex items-center justify-center mb-4">
+          <Heart size={36} className="text-pink-300" />
+        </div>
+        <h3 className="text-xl font-bold text-gray-800 mb-2">You're all caught up</h3>
+        <p className="text-gray-400 text-sm max-w-xs">Check back soon — new people join every day.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center">
+      {/* Card stack — fixed aspect ratio so the layout is predictable */}
+      <div className="relative w-full max-w-sm aspect-[3/4.3]">
+        <AnimatePresence>
+          {visible.map((p, i) => {
+            const isTop = i === 0;
+            return (
+              <SwipeCard
+                key={p.id}
+                person={p}
+                isTop={isTop}
+                offset={i}
+                zIndex={100 - i}
+                onLike={(id) => { /* handled in onExit */ void id; }}
+                onPass={(id) => { /* handled in onExit */ void id; }}
+                onOpen={onOpen}
+                onExit={(dir) => swipe(p.id, dir)}
+              />
+            );
+          })}
+        </AnimatePresence>
+      </div>
+
+      {/* Big action buttons below the deck — buttons mirror the swipe gestures
+          so users who don't discover the swipe UX can still operate the page. */}
+      <div className="flex items-center justify-center gap-6 mt-6">
+        <button
+          onClick={() => {
+            const top = candidates[cursor];
+            if (top) swipe(top.id, "left");
+          }}
+          className="w-14 h-14 rounded-full bg-white shadow-lg border border-gray-200 text-gray-500 hover:text-red-500 active:scale-95 transition flex items-center justify-center"
+          aria-label="Pass"
+        >
+          <X size={26} />
+        </button>
+        <button
+          onClick={() => {
+            const top = candidates[cursor];
+            if (top) swipe(top.id, "right");
+          }}
+          className="w-16 h-16 rounded-full bg-gradient-to-br from-pink-500 to-pink-600 shadow-lg shadow-pink-600/40 text-white active:scale-95 transition flex items-center justify-center"
+          aria-label="Like"
+        >
+          <Heart size={28} className="fill-white" />
+        </button>
+      </div>
+
+      {/* Hint row — swipe cue fades after a few seconds via CSS animation */}
+      <p className="mt-4 text-xs text-gray-400 text-center">
+        Tap to view profile · Swipe to decide
+      </p>
+    </div>
+  );
+}
+
 // ─── Discover View ────────────────────────────────────────────────────────────
 const EMPTY_FILTERS = {
   search: "", min_age: "", max_age: "", city: "", country: "",
@@ -788,22 +1004,38 @@ function DiscoverView({ showToast, onMatch, profile }) {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-            {candidates.map(p => (
-              <DiscoverCard key={p.id} person={p}
-                onLike={handleLike} onPass={handlePass}
-                onOpen={setOpenProfileId} />
-            ))}
+          {/* Mobile: Tinder-style swipe deck. Hidden ≥ md. */}
+          <div className="md:hidden">
+            <SwipeDeck
+              candidates={candidates}
+              onLike={handleLike}
+              onPass={handlePass}
+              onOpen={setOpenProfileId}
+              hasMore={hasMore}
+              loadingMore={loadingMore}
+              onLoadMore={() => { setLoadingMore(true); load(page + 1, debouncedFilters); }}
+            />
           </div>
-          {hasMore && (
-            <div className="mt-6 flex justify-center">
-              <button onClick={() => { setLoadingMore(true); load(page + 1, debouncedFilters); }}
-                disabled={loadingMore}
-                className="px-8 py-2.5 rounded-xl border-2 border-pink-200 text-pink-600 text-sm font-semibold hover:bg-pink-50 transition disabled:opacity-50">
-                {loadingMore ? "Loading…" : "Load more"}
-              </button>
+
+          {/* Tablet / desktop: grid of cards. Hidden < md. */}
+          <div className="hidden md:block">
+            <div className="grid md:grid-cols-3 xl:grid-cols-4 gap-4">
+              {candidates.map(p => (
+                <DiscoverCard key={p.id} person={p}
+                  onLike={handleLike} onPass={handlePass}
+                  onOpen={setOpenProfileId} />
+              ))}
             </div>
-          )}
+            {hasMore && (
+              <div className="mt-6 flex justify-center">
+                <button onClick={() => { setLoadingMore(true); load(page + 1, debouncedFilters); }}
+                  disabled={loadingMore}
+                  className="px-8 py-2.5 rounded-xl border-2 border-pink-200 text-pink-600 text-sm font-semibold hover:bg-pink-50 transition disabled:opacity-50">
+                  {loadingMore ? "Loading…" : "Load more"}
+                </button>
+              </div>
+            )}
+          </div>
         </>
       )}
 
