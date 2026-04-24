@@ -22,3 +22,26 @@ body {
 /* hide scrollbar while keeping scroll functionality */
 *::-webkit-scrollbar { display: none; }
 * { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── Form control theming ───────────────────────────────────────────
+ * Chrome auto-inverts inputs when the user's OS is in dark mode,
+ * which turns our white signup/login form boxes black. We design the
+ * app as a light-themed UI everywhere (the form bg is white), so force
+ * the native controls to follow the same scheme. `color-scheme: light`
+ * also suppresses the dark autofill pill that Chrome paints yellow-on-
+ * black on saved credentials. */
+input, textarea, select, button {
+  color-scheme: light;
+}
+
+/* Keep Chrome's autofill state visually consistent — otherwise saved
+ * emails/passwords paint the field pale yellow, which clashes with the
+ * form's neutral grey. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill {
+  -webkit-text-fill-color: #111827; /* gray-900 */
+  -webkit-box-shadow: 0 0 0 30px #ffffff inset;
+  transition: background-color 5000s ease-in-out 0s;
+}

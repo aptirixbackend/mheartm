@@ -16,7 +16,10 @@
     <meta name="application-name" content="MatchInMinutes" />
     <!-- Tint the Android Chrome toolbar to match the brand -->
     <meta name="theme-color" content="#ec4899" />
-    <meta name="color-scheme" content="light dark" />
+    <!-- Force light scheme only. "light dark" let Chrome auto-invert form
+         controls on users with dark-mode OS, making input boxes render
+         black on the otherwise-white signup/login forms. -->
+    <meta name="color-scheme" content="light only" />
 
     <!-- ── Primary meta ─────────────────────────────────────────────── -->
     <title>MatchInMinutes — Find Your Match in Minutes</title>
