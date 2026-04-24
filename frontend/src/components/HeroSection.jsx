@@ -35,10 +35,10 @@ export default function HeroSection() {
       <div className="absolute top-1/3 right-1/3 w-96 h-96 bg-purple-700/20 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 left-1/4 w-64 h-64 bg-pink-700/15 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="relative z-10 flex flex-1 items-center px-20 pt-4 pb-12 gap-12">
+      <div className="relative z-10 flex flex-1 flex-col lg:flex-row items-center px-5 sm:px-8 lg:px-20 pt-20 lg:pt-4 pb-12 gap-10 lg:gap-12">
 
         {/* ── LEFT TEXT ── */}
-        <div className="flex-1 max-w-xl">
+        <div className="flex-1 w-full max-w-xl text-center lg:text-left">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -53,11 +53,10 @@ export default function HeroSection() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.1 }}
-            className="text-white font-extrabold text-5xl leading-tight mb-5"
+            className="text-white font-extrabold text-4xl sm:text-5xl lg:text-6xl leading-[1.1] mb-5"
           >
-            When You Would Like
-            <br />
-            To Go On A{" "}
+            When You Would Like{" "}
+            <span className="block sm:inline">To Go On A </span>
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-500">
               Dating?
             </span>
@@ -67,7 +66,7 @@ export default function HeroSection() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="text-gray-400 text-base mb-10 leading-relaxed"
+            className="text-gray-400 text-base mb-8 sm:mb-10 leading-relaxed max-w-md mx-auto lg:mx-0"
           >
             A website aimed at singles looking for a real relationship —
             connecting people through shared places, interests &amp; meaningful moments.
@@ -77,15 +76,15 @@ export default function HeroSection() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
-            className="flex items-center gap-4 flex-wrap"
+            className="flex items-center gap-3 sm:gap-4 flex-wrap justify-center lg:justify-start"
           >
             <button onClick={() => navigate("/signup")}
-              className="flex items-center gap-2 bg-gradient-to-r from-pink-600 to-purple-600 text-white font-bold px-8 py-4 rounded-full shadow-xl shadow-pink-600/30 hover:shadow-pink-600/50 hover:scale-105 transition-all duration-200">
+              className="flex items-center gap-2 bg-gradient-to-r from-pink-600 to-purple-600 text-white font-bold px-6 sm:px-8 py-3.5 sm:py-4 rounded-full shadow-xl shadow-pink-600/30 hover:shadow-pink-600/50 hover:scale-105 transition-all duration-200 text-sm sm:text-base">
               Get Started Free
               <ArrowRight size={18} />
             </button>
             <button onClick={() => navigate("/login")}
-              className="flex items-center gap-2 text-white font-semibold px-6 py-4 rounded-full border border-gray-700 hover:border-pink-500/50 transition-all duration-200 hover:bg-white/5">
+              className="flex items-center gap-2 text-white font-semibold px-5 sm:px-6 py-3.5 sm:py-4 rounded-full border border-gray-700 hover:border-pink-500/50 transition-all duration-200 hover:bg-white/5 text-sm sm:text-base">
               <Search size={16} className="text-pink-400" />
               Browse Profiles
             </button>
@@ -96,7 +95,7 @@ export default function HeroSection() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.5 }}
-            className="flex items-center gap-6 mt-8"
+            className="flex items-center justify-center lg:justify-start gap-4 sm:gap-6 mt-8"
           >
             <div className="flex -space-x-2">
               {["women/21", "men/32", "women/44", "men/55"].map((p, i) => (
@@ -120,8 +119,12 @@ export default function HeroSection() {
           </motion.div>
         </div>
 
-        {/* ── RIGHT — COUPLE PHOTOS ── */}
-        <div className="flex-1 flex items-center justify-center relative" style={{ minHeight: 520 }}>
+        {/* ── RIGHT — COUPLE PHOTOS ──
+            Hidden below `lg` — the collage is built from pixel-perfect
+            absolute positions and a fixed 420×480 box, so scaling it
+            down was lossy. On mobile/tablet the heading + CTAs own the
+            whole hero, which reads cleaner anyway. */}
+        <div className="hidden lg:flex flex-1 items-center justify-center relative" style={{ minHeight: 520 }}>
 
           {/* Glow blob */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-gradient-to-br from-pink-600/20 to-purple-700/25 rounded-full blur-3xl pointer-events-none" />

@@ -38,7 +38,7 @@ const icons = [
 
 export default function SocialSidebar() {
   return (
-    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex flex-col gap-3 z-20">
+    <div className="hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 flex-col gap-3 z-20">
       {icons.map(({ svg, href }, i) => (
         <a
           key={i}
