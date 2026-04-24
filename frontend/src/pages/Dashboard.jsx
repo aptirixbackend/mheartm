@@ -549,6 +549,12 @@ function DetailChip({ Icon, label, value }) {
 }
 
 // ─── Discover Card ────────────────────────────────────────────────────────────
+// Single-container design: the whole card is one `aspect-[3/4]` box with the
+// image filling it absolutely and everything else (dots, arrows, info, action
+// buttons) floating over it. This guarantees every card renders identically
+// in the grid regardless of how many vibes chips a given profile has — the
+// previous two-section layout (photo above, white action bar below) meant
+// profiles with more chips pushed their card taller than their neighbours.
 function DiscoverCard({ person, onLike, onPass, onOpen }) {
   const [imgIdx, setImgIdx] = useState(0);
   const images = person.images?.length > 0
@@ -556,79 +562,84 @@ function DiscoverCard({ person, onLike, onPass, onOpen }) {
     : [person.main_image_url].filter(Boolean);
 
   return (
-    <div className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-shadow border border-gray-100 flex flex-col">
-      {/* Photo */}
-      <div className="relative aspect-[3/4] bg-gradient-to-br from-pink-100 to-purple-100 cursor-pointer"
-        onClick={() => onOpen?.(person.id)}>
-        {images.length > 0 ? (
-          <img src={images[imgIdx]} alt={person.name} className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <span className="text-6xl font-black text-pink-300">{person.name?.[0]}</span>
-          </div>
-        )}
+    <div
+      onClick={() => onOpen?.(person.id)}
+      className="relative aspect-[3/4] rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-shadow border border-gray-100 cursor-pointer bg-gradient-to-br from-pink-100 to-purple-100 group"
+    >
+      {/* Photo fills the entire card */}
+      {images.length > 0 ? (
+        <img
+          src={images[imgIdx]}
+          alt={person.name}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-6xl font-black text-pink-300">{person.name?.[0]}</span>
+        </div>
+      )}
 
-        {/* Image dots */}
-        {images.length > 1 && (
-          <div className="absolute top-2 left-0 right-0 flex justify-center gap-1 px-2">
-            {images.map((_, i) => (
-              <button key={i} onClick={(e) => { e.stopPropagation(); setImgIdx(i); }}
-                className={`h-1 rounded-full transition-all ${i === imgIdx ? "flex-1 bg-white" : "w-3 bg-white/50"}`} />
+      {/* Image dots — only when multiple photos */}
+      {images.length > 1 && (
+        <div className="absolute top-2 left-0 right-0 flex justify-center gap-1 px-2 z-10">
+          {images.map((_, i) => (
+            <button key={i} onClick={(e) => { e.stopPropagation(); setImgIdx(i); }}
+              className={`h-1 rounded-full transition-all ${i === imgIdx ? "flex-1 bg-white" : "w-3 bg-white/50"}`} />
+          ))}
+        </div>
+      )}
+
+      {/* Prev / Next arrows */}
+      {images.length > 1 && (
+        <>
+          {imgIdx > 0 && (
+            <button onClick={(e) => { e.stopPropagation(); setImgIdx(i => i - 1); }}
+              className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 bg-white/80 rounded-full flex items-center justify-center shadow z-10">
+              <ChevronLeft size={14} />
+            </button>
+          )}
+          {imgIdx < images.length - 1 && (
+            <button onClick={(e) => { e.stopPropagation(); setImgIdx(i => i + 1); }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 bg-white/80 rounded-full flex items-center justify-center shadow z-10">
+              <ChevronRight size={14} />
+            </button>
+          )}
+        </>
+      )}
+
+      {/* Bottom gradient veil + info + actions stacked — all inside the image */}
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-14 pb-3 px-3">
+        <h3 className="text-white font-bold text-lg leading-tight drop-shadow">{person.name}, {person.age}</h3>
+        {person.city && (
+          <p className="text-white/85 text-xs flex items-center gap-1 mt-0.5">
+            <MapPin size={11} /> {person.city}{person.country ? `, ${person.country}` : ""}
+          </p>
+        )}
+        {person.vibes?.length > 0 && (
+          <div className="flex gap-1 mt-1.5 flex-wrap">
+            {person.vibes.slice(0, 3).map(v => (
+              <span key={v} className="text-[10px] px-2 py-0.5 bg-white/25 text-white rounded-full backdrop-blur-sm">{v}</span>
             ))}
           </div>
         )}
 
-        {/* Prev / Next arrows */}
-        {images.length > 1 && (
-          <>
-            {imgIdx > 0 && (
-              <button onClick={(e) => { e.stopPropagation(); setImgIdx(i => i - 1); }}
-                className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 bg-white/80 rounded-full flex items-center justify-center shadow">
-                <ChevronLeft size={14} />
-              </button>
-            )}
-            {imgIdx < images.length - 1 && (
-              <button onClick={(e) => { e.stopPropagation(); setImgIdx(i => i + 1); }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 bg-white/80 rounded-full flex items-center justify-center shadow">
-                <ChevronRight size={14} />
-              </button>
-            )}
-          </>
-        )}
-
-        {/* Info overlay */}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-4">
-          <h3 className="text-white font-bold text-lg leading-tight">{person.name}, {person.age}</h3>
-          {person.city && (
-            <p className="text-white/80 text-xs flex items-center gap-1 mt-0.5">
-              <MapPin size={11} /> {person.city}{person.country ? `, ${person.country}` : ""}
-            </p>
-          )}
-          {person.vibes?.length > 0 && (
-            <div className="flex gap-1 mt-1.5 flex-wrap">
-              {person.vibes.slice(0, 3).map(v => (
-                <span key={v} className="text-[10px] px-2 py-0.5 bg-white/20 text-white rounded-full backdrop-blur-sm">{v}</span>
-              ))}
-            </div>
-          )}
+        {/* Action buttons — floating circular buttons on the gradient veil */}
+        <div className="flex items-center justify-center gap-3 mt-3">
+          <button
+            onClick={(e) => { e.stopPropagation(); onPass(person.id); }}
+            className="w-11 h-11 rounded-full bg-white/95 hover:bg-white text-gray-500 hover:text-red-500 shadow-lg hover:shadow-xl active:scale-95 transition flex items-center justify-center"
+            title="Pass"
+          >
+            <X size={18} />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onLike(person.id); }}
+            className="w-12 h-12 rounded-full bg-gradient-to-br from-pink-500 to-pink-600 text-white shadow-lg shadow-pink-600/40 hover:shadow-pink-600/60 active:scale-95 transition flex items-center justify-center"
+            title="Like"
+          >
+            <Heart size={20} className="fill-white" />
+          </button>
         </div>
-      </div>
-
-      {/* Actions */}
-      <div className="p-3 flex gap-2">
-        {person.occupation && (
-          <p className="text-xs text-gray-400 flex items-center gap-1 mb-2 truncate hidden">
-            <Briefcase size={11} /> {person.occupation}
-          </p>
-        )}
-        <button onClick={() => onPass(person.id)}
-          className="flex-1 py-2.5 rounded-xl border-2 border-gray-100 text-gray-400 hover:border-red-200 hover:text-red-400 hover:bg-red-50 transition font-semibold flex items-center justify-center gap-1.5 text-sm">
-          <X size={16} /> Pass
-        </button>
-        <button onClick={() => onLike(person.id)}
-          className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-pink-600 text-white hover:opacity-90 active:scale-95 transition font-semibold flex items-center justify-center gap-1.5 text-sm shadow-md shadow-pink-200">
-          <Heart size={16} className="fill-white" /> Like
-        </button>
       </div>
     </div>
   );

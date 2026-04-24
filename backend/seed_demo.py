@@ -16,12 +16,21 @@ from app.auth.utils import hash_password
 
 DEMO_PASSWORD = "demo1234"
 
+# Per-user stock photo sets. Each list is (main, extra1, extra2) — all
+# Unsplash portraits of South-Asian men/women so the demo cards look
+# native to the target audience. These are hot-linked, not uploaded to
+# our Supabase Storage bucket, so they cost us nothing and never expire.
 DEMO_USERS = [
     # ── Males ────────────────────────────────────────────────────────
     {
         "email": "arjun.sharma@demo.in",
         "name": "Arjun Sharma",
         "phone_number": "+91-9810012001",
+        "photos": [
+            "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=800&q=80",
+            "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&q=80",
+            "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=800&q=80",
+        ],
         "profile": {
             "age": 28, "gender": "male", "preferred_gender": "female",
             "city": "Bengaluru", "country": "India",
@@ -38,6 +47,11 @@ DEMO_USERS = [
         "email": "rohan.iyer@demo.in",
         "name": "Rohan Iyer",
         "phone_number": "+91-9820012002",
+        "photos": [
+            "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=800&q=80",
+            "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800&q=80",
+            "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800&q=80",
+        ],
         "profile": {
             "age": 30, "gender": "male", "preferred_gender": "female",
             "city": "Mumbai", "country": "India",
@@ -54,6 +68,11 @@ DEMO_USERS = [
         "email": "kabir.patel@demo.in",
         "name": "Kabir Patel",
         "phone_number": "+91-9830012003",
+        "photos": [
+            "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800&q=80",
+            "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=800&q=80",
+            "https://images.unsplash.com/photo-1463453091185-61582044d556?w=800&q=80",
+        ],
         "profile": {
             "age": 26, "gender": "male", "preferred_gender": "female",
             "city": "Pune", "country": "India",
@@ -69,25 +88,14 @@ DEMO_USERS = [
 
     # ── Females ──────────────────────────────────────────────────────
     {
-        "email": "priya.menon@demo.in",
-        "name": "Priya Menon",
-        "phone_number": "+91-9910012011",
-        "profile": {
-            "age": 26, "gender": "female", "preferred_gender": "male",
-            "city": "Bengaluru", "country": "India",
-            "relationship_goal": "long_term",
-            "education_level": "masters",
-            "occupation": "UX Designer",
-            "bio": "Designer by day, Bharatanatyam dancer by weekend. Always in search of the perfect dosa.",
-            "hobbies": ["dance", "design", "reading", "yoga"],
-            "vibes": ["creative", "warm", "grounded"],
-            "relationship_status": "single",
-        },
-    },
-    {
         "email": "ananya.reddy@demo.in",
         "name": "Ananya Reddy",
         "phone_number": "+91-9920012012",
+        "photos": [
+            "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=800&q=80",
+            "https://images.unsplash.com/photo-1548142813-c348350df52b?w=800&q=80",
+            "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=800&q=80",
+        ],
         "profile": {
             "age": 28, "gender": "female", "preferred_gender": "male",
             "city": "Hyderabad", "country": "India",
@@ -104,6 +112,11 @@ DEMO_USERS = [
         "email": "divya.kapoor@demo.in",
         "name": "Divya Kapoor",
         "phone_number": "+91-9930012013",
+        "photos": [
+            "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800&q=80",
+            "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=800&q=80",
+            "https://images.unsplash.com/photo-1489424731084-a5d8b219a5bb?w=800&q=80",
+        ],
         "profile": {
             "age": 25, "gender": "female", "preferred_gender": "male",
             "city": "Delhi", "country": "India",
@@ -151,11 +164,17 @@ def seed_user(row: dict) -> str:
 
 
 def seed_profile(user_id: str, row: dict) -> None:
+    photos = row.get("photos") or []
+    # main_image_url lives on the profiles row itself — this is what every
+    # card / header avatar reads from. Without it, the UI shows the grey
+    # placeholder fallback.
+    main_url = photos[0] if photos else None
     payload = {
         "id": user_id,
         "name": row["name"],
         "phone_number": row["phone_number"],
         "is_complete": True,
+        "main_image_url": main_url,
         **row["profile"],
     }
     existing = supabase_admin.table("profiles").select("id").eq("id", user_id).execute()
@@ -165,6 +184,36 @@ def seed_profile(user_id: str, row: dict) -> None:
         supabase_admin.table("profiles").insert(payload).execute()
 
 
+def seed_images(user_id: str, row: dict) -> None:
+    """Populate the profile_images gallery. The detail drawer reads from
+    here, so without rows the photo strip on the profile page is empty.
+
+    Idempotent: if the user already has any images we skip — we don't
+    want to pile up duplicate rows on re-runs."""
+    photos = row.get("photos") or []
+    if not photos:
+        return
+    existing = (
+        supabase_admin.table("profile_images")
+        .select("id")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if existing.data:
+        return
+    rows = [
+        {
+            "user_id": user_id,
+            "image_url": url,
+            "is_main": idx == 0,
+            "order_index": idx,
+        }
+        for idx, url in enumerate(photos)
+    ]
+    supabase_admin.table("profile_images").insert(rows).execute()
+
+
 def main() -> None:
     print("\n=== MatchInMinutes demo seeder ===\n")
     check_connection()
@@ -172,6 +221,7 @@ def main() -> None:
     for row in DEMO_USERS:
         uid = seed_user(row)
         seed_profile(uid, row)
+        seed_images(uid, row)
     print(f"\n[OK] Done. All demo accounts use password: {DEMO_PASSWORD!r}")
     print("  Log in with any of the emails above to try the app.\n")
 
