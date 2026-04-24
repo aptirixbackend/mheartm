@@ -180,5 +180,11 @@ class ProfileResponse(BaseModel):
     cover_image_url: Optional[str] = None
     verification_image_url: Optional[str] = None
     is_verified: bool = False
+    # Fine-grained state so the frontend can distinguish "never uploaded"
+    # (show upload banner), "pending admin review" (hide banner, treat as
+    # partially verified with full access), and "rejected" (show rejected
+    # banner + reupload CTA). `is_verified=true` iff status=='approved'.
+    verification_status: Optional[str] = None  # 'none' | 'pending' | 'approved' | 'rejected'
+    verification_note: Optional[str] = None    # admin-provided reject reason
     images: List[dict] = []
     is_complete: bool = False

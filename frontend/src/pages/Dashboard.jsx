@@ -910,7 +910,13 @@ function DiscoverView({ showToast, onMatch, profile }) {
       setPage(pg);
       setVerifyRequired(false);
     } catch (e) {
-      if ((e.message || "").includes("verify_required")) {
+      // Backend distinguishes two "you can't browse yet" cases:
+      //   verify_required → user never uploaded a selfie
+      //   verify_rejected → their selfie got rejected by admin
+      // We surface both via the same modal (the modal reads vStatus to
+      // switch its copy between "upload selfie" and "your selfie was
+      // rejected — try again").
+      if ((e.message || "").includes("verify_required") || (e.message || "").includes("verify_rejected")) {
         setVerifyRequired(true);
         setCandidates([]);
         setTotal(0);
@@ -969,19 +975,51 @@ function DiscoverView({ showToast, onMatch, profile }) {
     }
   }
 
+  // Verification state machine (see backend/app/profile/schemas.py).
+  //   'none'     → user skipped during signup: show amber "verify now" banner
+  //   'pending'  → selfie uploaded, awaiting admin: show green "partially verified"
+  //   'approved' → is_verified=true, no banner
+  //   'rejected' → show red "re-upload required" banner with admin's reason
+  const vStatus = (profile?.verification_status || (profile?.is_verified ? "approved" : "none")).toLowerCase();
+
   return (
     <div className="p-5">
-      {profile && !profile.is_verified && (
+      {profile && vStatus === "none" && (
         <div className="mb-4 flex items-center gap-3 p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm">
           <Camera size={16} className="flex-shrink-0" />
           <span className="flex-1">
-            Your profile isn't verified yet. You're browsing, but others can't see or match with you until you verify.
+            Your profile isn't verified yet. Upload a selfie so others can match with you.
           </span>
           <button
             onClick={() => window.dispatchEvent(new CustomEvent("dashboard:go", { detail: "profile" }))}
             className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-amber-500 text-white font-semibold text-xs hover:bg-amber-600 transition"
           >
             Verify now
+          </button>
+        </div>
+      )}
+      {profile && vStatus === "pending" && (
+        <div className="mb-4 flex items-center gap-3 p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-blue-800 text-sm">
+          <Clock size={16} className="flex-shrink-0" />
+          <span className="flex-1">
+            <b>Partially verified.</b> Your selfie is waiting for admin review — you have full access in the meantime.
+          </span>
+        </div>
+      )}
+      {profile && vStatus === "rejected" && (
+        <div className="mb-4 flex items-start gap-3 p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-800 text-sm">
+          <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-semibold">Verification rejected — please re-upload</p>
+            <p className="text-xs mt-0.5 text-red-700/90">
+              {profile.verification_note || "Your selfie didn't match your profile photo. Please upload a clear, well-lit selfie."}
+            </p>
+          </div>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("dashboard:go", { detail: "profile" }))}
+            className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-red-500 text-white font-semibold text-xs hover:bg-red-600 transition"
+          >
+            Re-upload
           </button>
         </div>
       )}
@@ -2219,26 +2257,71 @@ function ProfileView({ profile, onRefresh, showToast, conversations = [], setVie
   return (
     <div className="min-h-full bg-gradient-to-br from-rose-50 via-pink-50/60 to-rose-50 p-3 sm:p-5 md:p-8">
       <div className="max-w-7xl mx-auto space-y-4 md:space-y-5">
-        {/* Verification banner — only when the user skipped face verification. */}
-        {!profile.is_verified && (
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 bg-white/80 backdrop-blur border border-amber-200 rounded-3xl shadow-sm">
-            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-              <Camera size={18} className="text-amber-600" />
+        {/* Verification banner — three flavours depending on status:
+            - 'none'     : amber, "verify now"
+            - 'pending'  : blue, "waiting for admin review" (no CTA)
+            - 'rejected' : red, shows admin's reject note + reupload CTA
+            'approved'   : no banner rendered. */}
+        {(() => {
+          const s = (profile.verification_status || (profile.is_verified ? "approved" : "none")).toLowerCase();
+          if (s === "approved") return null;
+          if (s === "pending") {
+            return (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 bg-white/80 backdrop-blur border border-blue-200 rounded-3xl shadow-sm">
+                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                  <Clock size={18} className="text-blue-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 text-sm">Verification pending</p>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    Your selfie is with the admin team. You're partially verified and have full access in the meantime.
+                  </p>
+                </div>
+              </div>
+            );
+          }
+          if (s === "rejected") {
+            return (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 bg-white/80 backdrop-blur border border-red-200 rounded-3xl shadow-sm">
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                  <AlertCircle size={18} className="text-red-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 text-sm">Verification rejected</p>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    {profile.verification_note || "Your selfie didn't match your profile photo. Please re-upload a clear selfie."}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowVerifyModal(true)}
+                  className="flex-shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-500 text-white font-semibold text-sm hover:bg-red-600 transition shadow-md"
+                >
+                  <Camera size={15} /> Re-upload
+                </button>
+              </div>
+            );
+          }
+          // s === 'none' — the user skipped during signup
+          return (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 bg-white/80 backdrop-blur border border-amber-200 rounded-3xl shadow-sm">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <Camera size={18} className="text-amber-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-gray-900 text-sm">Verify your face to get matches</p>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  Only verified profiles appear in Discover and can send requests. Takes 10 seconds.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowVerifyModal(true)}
+                className="flex-shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-pink-600 text-white font-semibold text-sm hover:from-pink-600 hover:to-pink-700 transition shadow-md shadow-pink-100"
+              >
+                <Camera size={15} /> Verify now
+              </button>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-gray-900 text-sm">Verify your face to get matches</p>
-              <p className="text-xs text-gray-600 mt-0.5">
-                Only verified profiles appear in Discover and can send requests. Takes 10 seconds.
-              </p>
-            </div>
-            <button
-              onClick={() => setShowVerifyModal(true)}
-              className="flex-shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-pink-600 text-white font-semibold text-sm hover:from-pink-600 hover:to-pink-700 transition shadow-md shadow-pink-100"
-            >
-              <Camera size={15} /> Verify now
-            </button>
-          </div>
-        )}
+          );
+        })()}
 
         {showVerifyModal && (
           <VerifyFaceModal

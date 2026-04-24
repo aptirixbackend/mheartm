@@ -37,8 +37,14 @@ def get_potential_matches(user_id: str, page: int = 1, limit: int = 10, filters:
         raise HTTPException(status_code=404, detail="Complete your profile first")
     if not me.get("preferred_gender") or not me.get("gender"):
         raise HTTPException(status_code=404, detail="Complete your profile first")
-    if not me.get("is_verified"):
-        # Frontend keys off this detail string to render a "Verify now" CTA
+    # Verification gate — partial (selfie uploaded, pending admin review) and
+    # fully approved users both pass. Only users who never uploaded or whose
+    # selfie got rejected are blocked. The frontend picks between two CTAs
+    # based on the detail string.
+    v_status = (me.get("verification_status") or "none").lower()
+    if v_status == "rejected":
+        raise HTTPException(status_code=403, detail="verify_rejected")
+    if v_status not in ("pending", "approved") and not me.get("is_verified"):
         raise HTTPException(status_code=403, detail="verify_required")
 
     interacted = supabase_admin.table("match_interactions").select("target_id").eq("actor_id", user_id).execute()
@@ -89,20 +95,26 @@ def get_potential_matches(user_id: str, page: int = 1, limit: int = 10, filters:
 
 
 def _assert_verified(user_id: str) -> None:
-    """Only face-verified users can send likes/requests. Keeps the pool clean
-    and matches the 'only verified users are visible' rule symmetrically."""
+    """Only users who have at least uploaded a selfie (pending review) can
+    send likes/requests. Fully approved users pass too; rejected users are
+    blocked until they re-upload. "Partial" = pending is treated as full
+    access by design — the admin queue isn't a user-facing wait.
+    """
     res = (
         supabase_admin.table("profiles")
-        .select("is_verified")
+        .select("is_verified, verification_status")
         .eq("id", user_id)
         .maybe_single()
         .execute()
     )
-    if not res or not res.data or not res.data.get("is_verified"):
-        raise HTTPException(
-            status_code=403,
-            detail="Please verify your face before sending requests",
-        )
+    if not res or not res.data:
+        raise HTTPException(status_code=403, detail="verify_required")
+    row = res.data
+    status = (row.get("verification_status") or "none").lower()
+    if status == "rejected":
+        raise HTTPException(status_code=403, detail="verify_rejected")
+    if status not in ("pending", "approved") and not row.get("is_verified"):
+        raise HTTPException(status_code=403, detail="verify_required")
 
 
 def like_user(actor_id: str, target_id: str) -> dict:
