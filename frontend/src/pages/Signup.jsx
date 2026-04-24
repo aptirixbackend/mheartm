@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import PhoneCollageBg from "../components/PhoneCollageBg";
 import BrandLogo from "../components/BrandLogo";
+import { COUNTRIES, INDIA_STATES, INDIA_STATE_NAMES } from "../data/locations";
 
 const TOTAL_STEPS = 7;
 
@@ -202,6 +203,112 @@ function SelectButton({ label, selected, onClick }) {
   );
 }
 
+// Cascading country → state → city picker. Only "India" has curated
+// state+city data; other countries get free-text inputs for state and
+// city so users outside India can still sign up. The stored fields are
+// `country` and `city` — `state` is UI-only (not persisted) and exists
+// purely to narrow the city dropdown for Indian addresses.
+function LocationPicker({ country, state, city, onCountry, onState, onCity }) {
+  const isIndia = country === "India";
+  const isOtherCountry = country === "Other";
+  const cityOptions = isIndia && state ? (INDIA_STATES[state] || []) : [];
+
+  const selectClasses =
+    "w-full border border-gray-200 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition text-sm bg-white";
+  const inputClasses =
+    "w-full border border-gray-200 rounded-xl px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition text-sm";
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Country</label>
+        <select
+          value={country}
+          onChange={(e) => onCountry(e.target.value)}
+          className={selectClasses}
+        >
+          {COUNTRIES.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Other country — let user type country name */}
+      {isOtherCountry && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Enter country</label>
+          <input
+            type="text"
+            placeholder="Your country"
+            onChange={(e) => onCountry(e.target.value)}
+            className={inputClasses}
+          />
+        </div>
+      )}
+
+      {isIndia ? (
+        <>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
+            <select
+              value={state}
+              onChange={(e) => onState(e.target.value)}
+              className={selectClasses}
+            >
+              <option value="">Select state…</option>
+              {INDIA_STATE_NAMES.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+            <select
+              value={city}
+              onChange={(e) => onCity(e.target.value)}
+              disabled={!state}
+              className={`${selectClasses} ${!state ? "opacity-60 cursor-not-allowed" : ""}`}
+            >
+              <option value="">{state ? "Select city…" : "Select state first"}</option>
+              {cityOptions.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+              {/* Escape hatch so users from smaller towns aren't blocked */}
+              <option value="__other__">Other (type below)</option>
+            </select>
+            {city === "__other__" && (
+              <input
+                type="text"
+                placeholder="Your city"
+                onChange={(e) => onCity(e.target.value)}
+                className={`mt-2 ${inputClasses}`}
+                autoFocus
+              />
+            )}
+          </div>
+        </>
+      ) : (
+        // Non-India: free-text city. No state dropdown since we don't have
+        // curated city data for other countries.
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+          <div className="relative">
+            <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+            <input
+              type="text"
+              value={city}
+              onChange={(e) => onCity(e.target.value)}
+              placeholder="Your city"
+              className={`${inputClasses} pl-10`}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Signup() {
   const { user, profile, signup, googleSignIn, refreshProfile } = useAuth();
   const navigate = useNavigate();
@@ -220,7 +327,10 @@ export default function Signup() {
 
   const [form, setForm] = useState({
     name: "", email: "", password: "", phone_number: "",
-    age: "", date_of_birth: "", gender: "", city: "", country: "",
+    // India is the primary market — default country avoids a extra click
+    // for most users. `state` is UI-only (not sent to backend) and used to
+    // narrow the city dropdown for Indian addresses.
+    age: "", date_of_birth: "", gender: "", city: "", state: "", country: "India",
     preferred_gender: "", relationship_goal: "",
     education_level: "", occupation: "",
     hobbies: [], vibes: [], relationship_status: "", bio: "",
@@ -373,8 +483,9 @@ export default function Signup() {
       if (age === null || age < 18) return "You must be 18 or older";
       if (age > 100) return "Please enter a valid date of birth";
       if (!form.gender) return "Please select your gender";
-      if (!form.city.trim()) return "City is required";
       if (!form.country.trim()) return "Country is required";
+      if (form.country === "India" && !form.state.trim()) return "State is required";
+      if (!form.city.trim()) return "City is required";
     }
     if (step === 3) {
       if (!form.preferred_gender) return "Please select who you want to date";
@@ -678,10 +789,14 @@ export default function Signup() {
                   ))}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <InputField icon={<MapPin size={16} />} label="City" placeholder="Your city" value={form.city} onChange={(v) => set("city", v)} />
-                <InputField label="Country" placeholder="Country" value={form.country} onChange={(v) => set("country", v)} />
-              </div>
+              <LocationPicker
+                country={form.country}
+                state={form.state}
+                city={form.city}
+                onCountry={(v) => { set("country", v); set("state", ""); set("city", ""); }}
+                onState={(v) => { set("state", v); set("city", ""); }}
+                onCity={(v) => set("city", v)}
+              />
             </div>
           )}
 
