@@ -24,7 +24,4 @@ python run.py
 cd frontend
 npm install
 npm run dev
-```
 
-Seed the first admin account with `supabase_seed_admin.sql`
-(`admin@matchinminutes.com` / `Admin@MIM2025`).
