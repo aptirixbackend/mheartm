@@ -195,20 +195,55 @@ function ImagePane({ label, src, highlight }) {
   );
 }
 
+// Canned rejection reasons — phrased as direct, user-facing messages so
+// the selected value can be sent to the user as-is via `verification_note`.
+// Keep wording polite and actionable ("please do X") since the user reads
+// it verbatim on their dashboard. The "other" sentinel flips the dialog to
+// a free-text textarea for anything not listed here.
+const REJECT_REASONS = [
+  { value: "blurry",          label: "Selfie is blurry — please upload a clearer photo in good light." },
+  { value: "too_dark",        label: "Photo is too dark — please retake in a well-lit area." },
+  { value: "face_not_visible",label: "Your face isn't clearly visible — please center your face in the oval." },
+  { value: "face_covered",    label: "Face is partially covered (mask, sunglasses, hand) — please remove and retake." },
+  { value: "multiple_faces",  label: "Multiple people in the photo — please take the selfie alone." },
+  { value: "no_face",         label: "No face detected in the photo — please retake with your face in frame." },
+  { value: "mismatch",        label: "Selfie doesn't match your profile photos — please upload a selfie of the account owner." },
+  { value: "not_selfie",      label: "This doesn't look like a live selfie — please take a new photo with your camera (no screenshots, no photo of a photo)." },
+  { value: "heavily_filtered",label: "Photo appears heavily filtered or edited — please upload an unedited selfie." },
+  { value: "ai_generated",    label: "Photo appears AI-generated — please upload a real selfie." },
+  { value: "fake_profile",    label: "Profile photos appear to be not of you — please upload real photos of yourself." },
+  { value: "inappropriate",   label: "Photo contains inappropriate or explicit content — please upload a clean selfie." },
+  { value: "underage",        label: "You appear to be under 18. MatchInMinutes is only for adults 18+." },
+  { value: "low_resolution",  label: "Photo resolution is too low — please upload a higher-quality selfie." },
+  { value: "eyes_closed",     label: "Eyes are closed or looking away — please look at the camera and retake." },
+  { value: "wrong_angle",     label: "Photo angle makes your face hard to verify — please face the camera straight on." },
+  { value: "other",           label: "Other (type a custom reason)" },
+];
+
 function RejectDialog({ row, onClose, onDone }) {
-  const [reason, setReason] = useState("");
+  const [preset, setPreset] = useState("");
+  const [customReason, setCustomReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
+  const isOther = preset === "other";
+  const finalReason = isOther
+    ? customReason.trim()
+    : (REJECT_REASONS.find((r) => r.value === preset)?.label || "");
+
   async function submit(e) {
     e.preventDefault();
-    if (!reason.trim()) {
-      setErr("Reason is required — it's shown to the user so they know what to fix.");
+    if (!preset) {
+      setErr("Pick a reason — it's shown to the user so they know what to fix.");
+      return;
+    }
+    if (isOther && !customReason.trim()) {
+      setErr("Type a custom reason for this user.");
       return;
     }
     setBusy(true);
     try {
-      await adminApi.rejectVerification(row.id, reason.trim());
+      await adminApi.rejectVerification(row.id, finalReason);
       onDone?.();
     } catch (e2) {
       setErr(e2.message || "Rejection failed");
@@ -235,14 +270,36 @@ function RejectDialog({ row, onClose, onDone }) {
         <form onSubmit={submit} className="space-y-3">
           <label className="block">
             <span className="text-xs text-slate-400">Reason (shown to the user)</span>
-            <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={3}
-              placeholder="Selfie is blurry — please upload a clearer photo in good light."
-              className="w-full mt-1 rounded-lg bg-slate-950 border border-slate-800 focus:border-pink-500 focus:ring-1 focus:ring-pink-500/40 outline-none text-sm px-3 py-2 placeholder-slate-600 text-slate-100"
-            />
+            <select
+              value={preset}
+              onChange={(e) => { setPreset(e.target.value); setErr(""); }}
+              className="w-full mt-1 rounded-lg bg-slate-950 border border-slate-800 focus:border-pink-500 focus:ring-1 focus:ring-pink-500/40 outline-none text-sm px-3 py-2 text-slate-100"
+            >
+              <option value="">Select a reason…</option>
+              {REJECT_REASONS.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
           </label>
+
+          {isOther ? (
+            <label className="block">
+              <span className="text-xs text-slate-400">Custom reason</span>
+              <textarea
+                value={customReason}
+                onChange={(e) => setCustomReason(e.target.value)}
+                rows={3}
+                autoFocus
+                placeholder="Describe what the user needs to fix…"
+                className="w-full mt-1 rounded-lg bg-slate-950 border border-slate-800 focus:border-pink-500 focus:ring-1 focus:ring-pink-500/40 outline-none text-sm px-3 py-2 placeholder-slate-600 text-slate-100"
+              />
+            </label>
+          ) : preset ? (
+            <div className="text-[11px] text-slate-500 bg-slate-900/50 border border-slate-800 rounded-md px-3 py-2 leading-relaxed">
+              <span className="uppercase tracking-widest text-[10px] text-slate-600">Preview</span>
+              <div className="mt-1 text-slate-300">{finalReason}</div>
+            </div>
+          ) : null}
 
           {err ? (
             <div className="text-xs text-red-300 bg-red-950/40 border border-red-900/50 rounded-md px-3 py-2">
