@@ -3,10 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { Users, HeartHandshake, Globe, TrendingUp } from "lucide-react";
 
 const stats = [
-  { Icon: Users,          end: 8.6,  suffix: "M+", label: "Active Members",    decimals: 1 },
+  { Icon: Users,          end: 24,  suffix: "K+", label: "Active Members",    decimals: 1 },
   { Icon: HeartHandshake, end: 94,   suffix: "%",  label: "Match Success Rate", decimals: 0 },
-  { Icon: Globe,          end: 120,  suffix: "+",  label: "Countries",          decimals: 0 },
-  { Icon: TrendingUp,     end: 2,    suffix: "M+", label: "Couples Formed",     decimals: 0 },
+  { Icon: Globe,          end: 3,  suffix: "+",  label: "Countries",          decimals: 0 },
+  { Icon: TrendingUp,     end: 1,    suffix: "K+", label: "Couples Formed",     decimals: 0 },
 ];
 
 function AnimatedNumber({ end, suffix, decimals, trigger }) {
