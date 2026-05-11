@@ -3423,9 +3423,9 @@ function ProfileView({ profile, onRefresh, showToast, conversations = [], setVie
   const aboutLeft = [
     ["Live in", [profile.city, profile.country].filter(Boolean).join(", ")],
     ["Work as", profile.occupation],
-    ["Workplace", profile.workplace || "N/A"],
+    ["Workplace", profile.workplace],
     ["Education", prettify(profile.education_level)],
-    ["College", profile.college_university || "N/A"],
+    ["College", profile.college_university],
     ["Languages", (profile.languages || []).join(", ")],
     ["Religion", profile.religion],
     ["Height", profile.height_cm ? `${profile.height_cm} cm` : ""],
