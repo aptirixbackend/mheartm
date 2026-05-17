@@ -118,6 +118,11 @@ async def reject(liker_id: str, user=Depends(get_current_user)):
     return service.reject_liker(user["id"], liker_id)
 
 
+@router.delete("/{target_id}/like")
+async def unsend_like(target_id: str, user=Depends(get_current_user)):
+    return service.unsend_like(user["id"], target_id)
+
+
 @router.get("/disliked-by-me")
 async def disliked_by_me(user=Depends(get_current_user)):
     return service.get_disliked_by_me(user["id"])

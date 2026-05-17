@@ -3014,8 +3014,16 @@ function LikesView({ showToast }) {
                 onPass: async (id) => {
                   if (openContext === "received") {
                     await rejectLike(id);
+                  } else if (openContext === "sent") {
+                    try {
+                      await api.matches.unsendLike(id);
+                      setSent(prev => prev.filter(s => s.profile.id !== id));
+                      showToast("Like unsent");
+                      setOpenProfileId(null);
+                    } catch (e) {
+                      showToast(e.message || "Could not unsend like", "error");
+                    }
                   }
-                  // For sent / disliked: X just closes, no server action
                 },
               })}
           />

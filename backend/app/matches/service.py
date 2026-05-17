@@ -49,6 +49,7 @@ def get_potential_matches(user_id: str, page: int = 1, limit: int = 10, filters:
         .eq("preferred_gender", me["gender"])
         .eq("is_complete", True)
         .eq("is_verified", True)          # must have passed face verification
+        .eq("is_banned", False)           # exclude banned users from discover
         .not_.in_("id", excluded_ids)
     )
 
@@ -201,7 +202,7 @@ def get_my_matches(user_id: str) -> list:
     matches = []
     for row in res.data or []:
         partner = row["user2"] if row["user1_id"] == user_id else row["user1"]
-        if partner:
+        if partner and not partner.get("is_banned"):
             partner["images"] = partner.pop("profile_images", [])
             matches.append({
                 "match_id": row["id"],
@@ -233,7 +234,7 @@ def get_who_liked_me(user_id: str) -> list:
     results = []
     for row in res.data or []:
         actor = row.get("actor")
-        if actor and actor["id"] not in responded_ids:
+        if actor and actor["id"] not in responded_ids and not actor.get("is_banned"):
             actor["images"] = actor.pop("profile_images", [])
             results.append(actor)
     return results
@@ -266,7 +267,7 @@ def get_likes_sent(user_id: str) -> list:
     results = []
     for row in sent.data or []:
         target = row.get("target")
-        if not target:
+        if not target or target.get("is_banned"):
             continue
         their_action = response_map.get(target["id"])
         if their_action == "like":
@@ -288,6 +289,28 @@ def reject_liker(user_id: str, liker_id: str) -> dict:
     """Reject a pending incoming like (records a 'pass' from me toward the liker)."""
     _record_interaction(user_id, liker_id, "pass")
     return {"rejected": True}
+
+
+def unsend_like(user_id: str, target_id: str) -> dict:
+    """Unsend a pending outgoing like by deleting the interaction record."""
+    existing = (
+        supabase_admin.table("match_interactions")
+        .select("id")
+        .eq("actor_id", user_id)
+        .eq("target_id", target_id)
+        .eq("action", "like")
+        .execute()
+    )
+    if not existing.data:
+        raise HTTPException(status_code=400, detail="Like not found or already processed")
+
+    # Only allow unsending if it hasn't become a mutual match yet.
+    is_mutual, _ = _mutual_match(user_id, target_id)
+    if is_mutual:
+        raise HTTPException(status_code=400, detail="Already matched. You need to unmatch instead.")
+
+    supabase_admin.table("match_interactions").delete().eq("id", existing.data[0]["id"]).execute()
+    return {"unsent": True}
 
 
 def unmatch_user(user_id: str, partner_id: str) -> dict:
@@ -566,7 +589,7 @@ def get_disliked_by_me(user_id: str) -> list:
     results = []
     for row in res.data or []:
         target = row.get("target")
-        if not target:
+        if not target or target.get("is_banned"):
             continue
         target["images"] = target.pop("profile_images", [])
         results.append({

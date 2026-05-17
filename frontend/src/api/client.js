@@ -115,6 +115,7 @@ export const api = {
     discover:  (page = 1, filters = {}) =>
       request(`/matches/discover${qs({ page, limit: 12, ...filters })}`),
     like:      (id) => request(`/matches/${id}/like`, { method: "POST" }),
+    unsendLike: (id) => request(`/matches/${id}/like`, { method: "DELETE" }),
     giftLike:  (id, message = null) => request(`/matches/${id}/gift-like`, {
       method: "POST",
       body: JSON.stringify({ message: message || null }),
